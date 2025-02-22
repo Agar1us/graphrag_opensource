@@ -12,7 +12,8 @@ from typing import Any
 
 import networkx as nx
 import tiktoken
-from fnllm.types import ChatLLM
+from transformers import AutoTokenizer
+from graphrag.index.llm.openai_interface import AsyncOpenAIClient
 
 import graphrag.config.defaults as defs
 from graphrag.index.typing import ErrorHandlerFn
@@ -42,7 +43,7 @@ class GraphExtractionResult:
 class GraphExtractor:
     """Unipartite graph extractor class definition."""
 
-    _llm: ChatLLM
+    _llm: AsyncOpenAIClient
     _join_descriptions: bool
     _tuple_delimiter_key: str
     _record_delimiter_key: str
@@ -59,7 +60,7 @@ class GraphExtractor:
 
     def __init__(
         self,
-        llm_invoker: ChatLLM,
+        llm_invoker: AsyncOpenAIClient,
         tuple_delimiter_key: str | None = None,
         record_delimiter_key: str | None = None,
         input_text_key: str | None = None,
@@ -91,10 +92,15 @@ class GraphExtractor:
         self._on_error = on_error or (lambda _e, _s, _d: None)
 
         # Construct the looping arguments
-        encoding = tiktoken.get_encoding(encoding_model or defs.ENCODING_MODEL)
-        yes = f"{encoding.encode('Y')[0]}"
-        no = f"{encoding.encode('N')[0]}"
-        self._loop_args = {"logit_bias": {yes: 100, no: 100}, "max_tokens": 1}
+        if encoding_model in tiktoken.model.MODEL_TO_ENCODING or encoding_model=='':
+            encoding = tiktoken.get_encoding(encoding_model or defs.ENCODING_MODEL)
+            self.yes = f"{encoding.encode('Y')[0]}"
+            self.no = f"{encoding.encode('N')[0]}"
+        else:
+            encoding = AutoTokenizer.from_pretrained(encoding_model)
+            self.yes = f"{encoding.encode('Y', add_special_tokens=False)[0]}"
+            self.no = f"{encoding.encode('N', add_special_tokens=False)[0]}"
+        # self._loop_args = {"logit_bias": {yes: 100, no: 100}, "max_tokens": 1}
 
     async def __call__(
         self, texts: list[str], prompt_variables: dict[str, Any] | None = None
@@ -125,6 +131,7 @@ class GraphExtractor:
             try:
                 # Invoke the entity extraction
                 result = await self._process_document(text, prompt_variables)
+                print('-------------------------------------', result, '-------------------------------------', sep='\n')
                 source_doc_map[doc_index] = text
                 all_records[doc_index] = result
             except Exception as e:
@@ -156,31 +163,38 @@ class GraphExtractor:
             self._extraction_prompt.format(**{
                 **prompt_variables,
                 self._input_text_key: text,
-            }),
-        )
-        results = response.output.content or ""
-
+            }), additional_parameters={'extra_body':{
+                'provider': {'order': ['Fireworks']}}})
+        results = response.choices[0].message.content or ""
         # Repeat to ensure we maximize entity count
         for i in range(self._max_gleanings):
             response = await self._llm(
                 CONTINUE_PROMPT,
-                name=f"extract-continuation-{i}",
                 history=response.history,
-            )
-            results += response.output.content or ""
-
+                additional_parameters={
+                    'extra_body': {
+                        'provider': {'order': ['Fireworks']}
+                        }
+                    }
+                )
+            results += response.choices[0].message.content or ""
             # if this is the final glean, don't bother updating the continuation flag
             if i >= self._max_gleanings - 1:
                 break
 
             response = await self._llm(
                 LOOP_PROMPT,
-                name=f"extract-loopcheck-{i}",
                 history=response.history,
-                model_parameters=self._loop_args,
-            )
+                additional_parameters={
+                    'extra_body': {
+                        'provider': {'order': ['Fireworks']}
+                        },
+                    "logit_bias": {self.yes: 100, self.no: 100},
+                    "max_tokens": 1
+                    }
+                )
 
-            if response.output.content != "Y":
+            if response.choices[0].message.content != "Y":
                 break
 
         return results

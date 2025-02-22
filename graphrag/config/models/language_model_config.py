@@ -122,61 +122,9 @@ class LanguageModelConfig(BaseModel):
         description="The base URL for the LLM API.", default=None
     )
 
-    def _validate_api_base(self) -> None:
-        """Validate the API base.
-
-        Required when using AOI.
-
-        Raises
-        ------
-        AzureApiBaseMissingError
-            If the API base is missing and is required.
-        """
-        if (
-            self.type == LLMType.AzureOpenAIChat
-            or self.type == LLMType.AzureOpenAIEmbedding
-        ) and (self.api_base is None or self.api_base.strip() == ""):
-            raise AzureApiBaseMissingError(self.type.value)
-
     api_version: str | None = Field(
         description="The version of the LLM API to use.", default=None
     )
-
-    def _validate_api_version(self) -> None:
-        """Validate the API version.
-
-        Required when using AOI.
-
-        Raises
-        ------
-        AzureApiBaseMissingError
-            If the API base is missing and is required.
-        """
-        if (
-            self.type == LLMType.AzureOpenAIChat
-            or self.type == LLMType.AzureOpenAIEmbedding
-        ) and (self.api_version is None or self.api_version.strip() == ""):
-            raise AzureApiVersionMissingError(self.type.value)
-
-    deployment_name: str | None = Field(
-        description="The deployment name to use for the LLM service.", default=None
-    )
-
-    def _validate_deployment_name(self) -> None:
-        """Validate the deployment name.
-
-        Required when using AOI.
-
-        Raises
-        ------
-        AzureDeploymentNameMissingError
-            If the deployment name is missing and is required.
-        """
-        if (
-            self.type == LLMType.AzureOpenAIChat
-            or self.type == LLMType.AzureOpenAIEmbedding
-        ) and (self.deployment_name is None or self.deployment_name.strip() == ""):
-            raise AzureDeploymentNameMissingError(self.type.value)
 
     organization: str | None = Field(
         description="The organization to use for the LLM service.", default=None
@@ -222,26 +170,9 @@ class LanguageModelConfig(BaseModel):
         description="The async mode to use.", default=defs.ASYNC_MODE
     )
 
-    def _validate_azure_settings(self) -> None:
-        """Validate the Azure settings.
-
-        Raises
-        ------
-        AzureApiBaseMissingError
-            If the API base is missing and is required.
-        AzureApiVersionMissingError
-            If the API version is missing and is required.
-        AzureDeploymentNameMissingError
-            If the deployment name is missing and is required.
-        """
-        self._validate_api_base()
-        self._validate_api_version()
-        self._validate_deployment_name()
-
     @model_validator(mode="after")
     def _validate_model(self):
         self._validate_auth_type()
         self._validate_api_key()
-        self._validate_azure_settings()
         self._validate_encoding_model()
         return self

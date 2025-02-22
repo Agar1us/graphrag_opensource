@@ -32,8 +32,6 @@ async def run_graph_intelligence(
     llm = load_llm(
         "extract_graph",
         llm_config,
-        callbacks=callbacks,
-        cache=cache,
     )
     return await run_extract_graph(llm, docs, entity_types, callbacks, args)
 

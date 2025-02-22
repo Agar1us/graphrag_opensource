@@ -103,14 +103,9 @@ class LLMType(str, Enum):
 
     # Embeddings
     OpenAIEmbedding = "openai_embedding"
-    AzureOpenAIEmbedding = "azure_openai_embedding"
 
     # Chat Completion
     OpenAIChat = "openai_chat"
-    AzureOpenAIChat = "azure_openai_chat"
-
-    # Debug
-    StaticResponse = "static_response"
 
     def __repr__(self):
         """Get a string representation."""
